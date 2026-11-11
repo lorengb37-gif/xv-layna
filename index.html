@@ -29,6 +29,8 @@ body{font-family:var(--serif);color:var(--ink);background:var(--blush);overflow-
 body.locked{overflow:hidden;height:100svh}
 img{max-width:100%;display:block}
 button,input,select,textarea{font:inherit;color:inherit}
+::before,::after{pointer-events:none}
+.corner,.cloud,.twinkle,.bf,.keystone,.glass{pointer-events:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
 /* ---------- gold text ---------- */
@@ -175,8 +177,8 @@ body.ready .name.h-in{clip-path:inset(0 -10% 0 0);transition:clip-path 2.2s cubi
 @keyframes swing2{0%,100%{transform:rotate(1.4deg)}50%{transform:rotate(-1.4deg)}}
 .crystal{animation:glint 3s ease-in-out infinite}
 @keyframes glint{0%,100%{opacity:.75}50%{opacity:1}}
-.frame{position:relative;max-width:440px;margin:22px auto 0;padding:44px 28px 36px;background:linear-gradient(180deg,#fffbf6,#fff2f6);box-shadow:0 30px 60px -32px rgba(143,28,92,.5)}
-.frame::before{content:"";position:absolute;inset:-8px;padding:8px;background:var(--gold);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.frame{position:relative;z-index:0;isolation:isolate;max-width:440px;margin:22px auto 0;padding:44px 28px 36px;background:linear-gradient(180deg,#fffbf6,#fff2f6);box-shadow:0 30px 60px -32px rgba(143,28,92,.5)}
+.frame::before{content:"";position:absolute;z-index:-1;inset:-8px;padding:8px;background:var(--gold);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
 .frame::after{content:"";position:absolute;inset:8px;border:1px solid rgba(201,151,58,.65);pointer-events:none}
 .corner{position:absolute;width:52px;height:52px;z-index:1}
 .corner.tl{top:-14px;left:-14px}.corner.tr{top:-14px;right:-14px;transform:scaleX(-1)}
@@ -239,8 +241,8 @@ body.ready .name.h-in{clip-path:inset(0 -10% 0 0);transition:clip-path 2.2s cubi
 .tag b{font-family:var(--serif);font-size:1.5rem;font-weight:600;color:var(--magenta);letter-spacing:.02em}
 
 /* ---------- rsvp ---------- */
-.card{position:relative;max-width:440px;margin:24px auto 0;padding:34px 24px 28px;background:linear-gradient(180deg,#fffbf6,#fff3f7);text-align:left;box-shadow:0 30px 60px -32px rgba(143,28,92,.5)}
-.card::before{content:"";position:absolute;inset:-6px;padding:6px;background:var(--gold);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.card{position:relative;z-index:3;isolation:isolate;max-width:440px;margin:24px auto 0;padding:34px 24px 28px;background:linear-gradient(180deg,#fffbf6,#fff3f7);text-align:left;box-shadow:0 30px 60px -32px rgba(143,28,92,.5)}
+.card::before{content:"";position:absolute;z-index:-1;inset:-6px;padding:6px;background:var(--gold);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
 .field{margin-bottom:18px}
 .field label,.field legend{display:block;font-family:var(--caps);font-size:.64rem;letter-spacing:.24em;color:var(--berry);margin-bottom:8px;text-transform:uppercase}
 .field input,.field select,.field textarea{width:100%;padding:13px 14px;border:1px solid #e5c7d6;border-radius:10px;background:#fff;font-size:1.08rem;transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;appearance:none}
@@ -875,12 +877,21 @@ form.addEventListener('submit',e=>{
   err.textContent='';
   const yes=form.att.value==='si', n=+form.count.value;
   const t = yes
-    ? `¡Hola! Soy ${name} y te confirmo mi asistencia a los XV años de ${CONFIG.quinceanera} 👑
+    ? `¡Hola! Soy ${name} y te confirmo mi asistencia a los XV años de ${CONFIG.quinceanera}.
 `+(n>1?`Seremos ${n} personas.
-`:'')+`¡Nos vemos el sábado 26 de diciembre en el baile real! ✨`
-    : `¡Hola! Soy ${name}. Lamentablemente no podré asistir a los XV años de ${CONFIG.quinceanera}, pero le deseo una noche mágica e inolvidable. 💖`;
-  const url='https://wa.me/'+CONFIG.whatsapp+'?text='+enc(t);
-  const w=window.open(url,'_blank'); if(!w) location.href=url;
+`:'')+`¡Nos vemos el sábado 26 de diciembre en el baile real!`
+    : `¡Hola! Soy ${name}. Lamentablemente no podré asistir a los XV años de ${CONFIG.quinceanera}, pero le deseo una noche mágica e inolvidable.`;
+  const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent));
+  const q='phone='+CONFIG.whatsapp+'&text='+enc(t);
+  $('#rsvpCard').classList.add('sent');
+  if(mobile){
+    // abre la app de WhatsApp directo en el chat; si no está instalada, cae a la página web
+    let left=false; const mark=()=>{left=true;};
+    addEventListener('pagehide',mark,{once:true}); document.addEventListener('visibilitychange',()=>{if(document.hidden)left=true;},{once:true});
+    location.href='whatsapp://send?'+q;
+    setTimeout(()=>{ if(!left && !document.hidden) location.href='https://api.whatsapp.com/send?'+q; },1600);
+  }
+  else { const w=window.open('https://web.whatsapp.com/send?'+q,'_blank'); if(!w) location.href='https://web.whatsapp.com/send?'+q; } // computadora: WhatsApp Web directo al chat
   $('#thanksMsg').textContent = yes ? 'Tu confirmación está lista en WhatsApp. Solo falta tocar enviar. ¡Nos vemos en el baile!' : 'Tu mensaje está listo en WhatsApp. Gracias por avisarme, te voy a extrañar.';
   $('#rsvpCard').classList.add('sent');
   const b=$('#rsvpCard').getBoundingClientRect(); burst(b.left+b.width/2,b.top+80,60);
