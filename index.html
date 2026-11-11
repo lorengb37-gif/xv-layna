@@ -29,6 +29,7 @@ body{font-family:var(--serif);color:var(--ink);background:var(--blush);overflow-
 body.locked{overflow:hidden;height:100svh}
 img{max-width:100%;display:block}
 button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
 ::before,::after{pointer-events:none}
 .corner,.cloud,.twinkle,.bf,.keystone,.glass{pointer-events:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -109,6 +110,10 @@ section{position:relative;padding:88px 22px;text-align:center;overflow-x:clip}
 .date .d{font-family:var(--serif);font-size:2.6rem;line-height:1;font-weight:500;padding:0 12px;border-left:1px solid var(--gold-2);border-right:1px solid var(--gold-2);color:var(--magenta)}
 .date .side{border-top:1px solid var(--gold-2);border-bottom:1px solid var(--gold-2);padding:4px 0}
 .date .yr{grid-column:1/4;font-size:.7rem;letter-spacing:.42em}
+.pase{margin-top:22px;display:inline-flex;align-items:center;gap:12px;padding:10px 22px;border-radius:999px;border:1.5px solid transparent;
+  background:linear-gradient(180deg,#fffaf3,#fdeef4) padding-box,var(--gold) border-box;box-shadow:0 10px 22px -14px rgba(143,28,92,.6);font-family:var(--caps);font-size:.66rem;letter-spacing:.24em;color:var(--berry);text-transform:uppercase}
+.pase b{font-family:var(--serif);font-size:1.7rem;letter-spacing:0;color:var(--magenta);font-weight:600;line-height:1}
+.cupo{display:block;margin-top:8px;font-family:var(--caps);font-size:.66rem;letter-spacing:.2em;color:var(--berry);text-transform:uppercase}
 .hero-sub{margin-top:26px;font-style:italic;font-size:1.15rem;color:var(--ink);max-width:330px}
 .scroll-hint{margin-top:22px;font-family:var(--caps);font-size:.6rem;letter-spacing:.38em;color:var(--berry);display:flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none}
 .scroll-hint span{width:1px;height:42px;background:linear-gradient(var(--gold-2),transparent);position:relative;overflow:hidden}
@@ -441,6 +446,7 @@ body.ready #music{opacity:1;transform:none}
     <div class="bf hover" style="width:52px;right:-2%;bottom:12%;animation-delay:-2s"><img data-img="bf" alt=""></div>
   </div>
 
+  <div class="pase h-in" id="pase" style="--d:3s" hidden>Pase válido para <b id="paseN">1</b> <span id="paseW">persona</span></div>
   <p class="hero-sub h-in" style="--d:3.2s">Hay noches que se sueñan desde niña. Esta es una de ellas.</p>
   <a class="scroll-hint h-in" style="--d:3.6s" href="#historia">Desliza<span></span></a>
 </section>
@@ -689,7 +695,7 @@ body.ready #music{opacity:1;transform:none}
           </div>
         </fieldset>
         <div class="field" id="countField">
-          <label for="fCount">Personas (contándote)</label>
+          <label for="fCount">Personas que asistirán (contándote)</label>
           <select id="fCount" name="count"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
         </div>
         <p class="err" id="err" role="alert"></p>
@@ -774,6 +780,15 @@ $('#wazeBtn').href = 'https://waze.com/ul?q='+enc(CONFIG.mapsQuery)+'&navigate=y
 $('#telLink').href = 'tel:+'+CONFIG.whatsapp; $('#telLink').textContent = CONFIG.telefonoVisible;
 $('#hashtag').textContent = CONFIG.hashtag;
 if(CONFIG.confirmarAntes) $('#rsvpLead').innerHTML += ' <br><b style="color:var(--magenta)">Confirma antes del '+CONFIG.confirmarAntes+'.</b>';
+/* cupo por enlace: ?p=1..5 */
+const CUPO=Math.min(5,Math.max(0,parseInt(new URLSearchParams(location.search).get('p'),10)||0));
+if(CUPO){
+  const pl=CUPO===1?'persona':'personas';
+  $('#paseN').textContent=CUPO; $('#paseW').textContent=pl; $('#pase').hidden=false;
+  const sel=$('#fCount'); sel.innerHTML=Array.from({length:CUPO},(_,i)=>`<option>${i+1}</option>`).join(''); sel.value=String(CUPO);
+  const lab=document.createElement('span'); lab.className='cupo'; lab.textContent=`Tu invitación es válida para ${CUPO} ${pl}`; $('#rsvpLead').appendChild(lab);
+  if(CUPO===1){ $('#countField').hidden=true; }
+}
 const fam=[]; if(CONFIG.padres.length) fam.push(['Mis padres',CONFIG.padres]); if(CONFIG.padrinos.length) fam.push(['Mis padrinos',CONFIG.padrinos]);
 if(fam.length){ $('#familia').hidden=false; $('#familyList').innerHTML = fam.map(([t,n])=>`<div><h3>${t}</h3>${n.map(x=>`<p>${x.replace(/[<>&]/g,'')}</p>`).join('')}</div>`).join(''); }
 
@@ -869,7 +884,7 @@ addEventListener('resize',onScroll); onScroll();
 
 /* ---------- RSVP → WhatsApp ---------- */
 const form=$('#rsvpForm');
-form.addEventListener('change',()=>{ $('#countField').style.display = form.att.value==='no'?'none':''; });
+form.addEventListener('change',()=>{ $('#countField').style.display = (form.att.value==='no'||CUPO===1)?'none':''; });
 form.addEventListener('submit',e=>{
   e.preventDefault();
   const name=form.guest.value.trim(); const err=$('#err');
