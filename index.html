@@ -799,47 +799,65 @@ $('#copyTag').addEventListener('click',async()=>{try{await navigator.clipboard.w
 
 /* ---------- music box (melodía original, Web Audio) ---------- */
 const Music=(()=>{
-  let ctx,master,delay,playing=false,timer,next=0,idx=0;
-  const N=n=>440*Math.pow(2,(n-69)/12);
-  // [midi, beats]  — vals 3/4 en Re mayor
+  /* La melodía (vals original) se pre-renderiza a un WAV y se reproduce con <audio>,
+     así suena también con el iPhone en modo silencio y en el navegador de WhatsApp. */
+  const N=n=>440*Math.pow(2,(n-69)/12), beat=.34, LOOPB=48, SR=44100;
   const mel=[[66,2],[69,1],[74,2],[73,1],[71,1],[69,1],[67,1],[66,3],
              [67,2],[71,1],[76,2],[74,1],[73,1],[71,1],[69,1],[69,3],
              [66,2],[69,1],[74,2],[78,1],[76,1],[74,1],[71,1],[69,2],[66,1],
              [67,1],[71,1],[64,1],[69,2],[73,1],[74,3],[0,3]];
   const bass=[50,50,43,50,43,52,45,45,50,47,43,50,52,45,50,50];
-  const beat=.34;
-  function note(m,t,vel,dur){
-    if(!m) return;
-    const g=ctx.createGain(); g.connect(master); g.connect(delay);
-    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel,t+.006); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-    [[1,1],[2.003,.22],[4.01,.06]].forEach(([r,a])=>{const o=ctx.createOscillator(),og=ctx.createGain();o.type='sine';o.frequency.value=N(m)*r;og.gain.value=a;o.connect(og);og.connect(g);o.start(t);o.stop(t+dur+.05);});
+  const loop=[];{let b=0;mel.forEach(([m,d])=>{loop.push([b,m,.22,Math.max(1.4,d*beat*2.2)]);b+=d;});bass.forEach((m,i)=>{loop.push([i*3,m,.12,2.2]);loop.push([i*3+1,m+7,.05,.9]);loop.push([i*3+2,m+12,.05,.9]);});}
+  function wav(ch){ // mono 16-bit
+    const n=ch.length, buf=new ArrayBuffer(44+n*2), v=new DataView(buf); let o=0;
+    const s=t=>{for(let i=0;i<t.length;i++)v.setUint8(o++,t.charCodeAt(i));}, u32=x=>{v.setUint32(o,x,true);o+=4}, u16=x=>{v.setUint16(o,x,true);o+=2};
+    s('RIFF');u32(36+n*2);s('WAVE');s('fmt ');u32(16);u16(1);u16(1);u32(SR);u32(SR*2);u16(2);u16(16);s('data');u32(n*2);
+    for(let i=0;i<n;i++){const x=Math.max(-1,Math.min(1,ch[i]));v.setInt16(o,x<0?x*0x8000:x*0x7fff,true);o+=2;}
+    return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
   }
-  // precompute a timeline of one loop (16 bars * 3 beats)
-  const loop=[];{let b=0;mel.forEach(([m,d])=>{loop.push([b,m,.22,Math.max(1.4,d*beat*2.2)]);b+=d;});bass.forEach((m,i)=>{loop.push([i*3,m,.12,2.2]);loop.push([i*3+1,m+7,.05,.9]);loop.push([i*3+2,m+12,.05,.9]);});loop.sort((a,b)=>a[0]-b[0]);}
-  const LOOPB=48; let loopStart=0;
-  function sched(){
-    while(true){
-      const ev=loop[idx]; const t=loopStart+ev[0]*beat;
-      if(t>ctx.currentTime+.25) break;
-      note(ev[1],Math.max(t,ctx.currentTime),ev[2],ev[3]);
-      idx++; if(idx>=loop.length){idx=0;loopStart+=LOOPB*beat;}
-    }
+  let ready=null;
+  function render(){
+    if(ready) return ready;
+    const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext; if(!OAC) return ready=Promise.reject();
+    const loopLen=LOOPB*beat, tail=2.5, ctx=new OAC(1,Math.ceil((loopLen+tail)*SR),SR);
+    const master=ctx.createGain(); master.gain.value=.55; master.connect(ctx.destination);
+    const delay=ctx.createDelay(); delay.delayTime.value=.27; const fb=ctx.createGain(); fb.gain.value=.28; const wet=ctx.createGain(); wet.gain.value=.22;
+    delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
+    loop.forEach(([b,m,vel,dur])=>{ if(!m) return; const t=b*beat+.02;
+      const g=ctx.createGain(); g.connect(master); g.connect(delay);
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vel,t+.006); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      [[1,1],[2.003,.22],[4.01,.06]].forEach(([r,a])=>{const os=ctx.createOscillator(),og=ctx.createGain();os.type='sine';os.frequency.value=N(m)*r;og.gain.value=a;os.connect(og);og.connect(g);os.start(t);os.stop(t+dur+.05);});
+    });
+    const done=new Promise((res,rej)=>{ ctx.oncomplete=e=>res(e.renderedBuffer); const p=ctx.startRendering(); if(p&&p.then) p.then(res,rej); });
+    return ready=done.then(b=>{
+      const d=b.getChannelData(0), L=Math.floor(loopLen*SR), out=new Float32Array(L);
+      out.set(d.subarray(0,L)); for(let i=L;i<d.length;i++) out[i-L]+=d[i]; // cola de eco al inicio: bucle sin cortes
+      let pk=0; for(let i=0;i<out.length;i++){const x=Math.abs(out[i]); if(x>pk) pk=x;}
+      const k=pk>0?.85/pk:1; for(let i=0;i<out.length;i++) out[i]*=k; // volumen claro en celular
+      return wav(out);
+    });
   }
+  const el=new Audio(); el.loop=true; el.preload='auto'; el.setAttribute('playsinline',''); el.setAttribute('webkit-playsinline','');
+  const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  let playing=false;
+  function ui(){const b=$('#music');b.classList.toggle('on',playing);b.setAttribute('aria-pressed',playing);}
+  render().catch(()=>{});
   return {
     toggle(on){
-      if(on===playing) return;
-      if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.0;master.connect(ctx.destination);
-        delay=ctx.createDelay();delay.delayTime.value=.27;const fb=ctx.createGain();fb.gain.value=.28;const wet=ctx.createGain();wet.gain.value=.22;delay.connect(fb);fb.connect(delay);delay.connect(wet);wet.connect(master);}
-      ctx.resume(); playing=on;
-      if(on){loopStart=ctx.currentTime+.1;idx=0;master.gain.cancelScheduledValues(ctx.currentTime);master.gain.setTargetAtTime(.5,ctx.currentTime,.4);timer=setInterval(sched,60);sched();}
-      else{master.gain.setTargetAtTime(0,ctx.currentTime,.15);clearInterval(timer);}
-      const b=$('#music');b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);
+      playing=on; ui();
+      if(!on){ el.pause(); return; }
+      if(el.src && el.src.startsWith('blob:')){ el.play().catch(()=>{playing=false;ui();}); return; }
+      // primer toque: desbloquea el reproductor dentro del gesto y luego carga la pista
+      el.src=SILENT; el.play().catch(()=>{});
+      render().then(url=>{ el.src=url; if(playing) el.play().catch(()=>{playing=false;ui();}); }).catch(()=>{playing=false;ui();});
     },
-    get on(){return playing}
+    get on(){return playing},
+    get el(){return el}
   };
 })();
+window.XVMusic=Music;
 $('#music').addEventListener('click',()=>Music.toggle(!Music.on));
-document.addEventListener('visibilitychange',()=>{ if(document.hidden && Music.on){Music.toggle(false);Music.wasOn=true;} });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && Music.on){Music.toggle(false);Music.wasOn=true;} else if(!document.hidden && Music.wasOn){Music.wasOn=false;Music.toggle(true);} });
 
 /* ---------- intro ---------- */
 $('#openBtn').addEventListener('click',()=>{
